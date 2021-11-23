@@ -10,6 +10,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Template represents an entire Ego template.
@@ -93,9 +95,26 @@ func writeBlocksTo(buf *bytes.Buffer, blks []Block) {
 				fmt.Fprintf(buf, "}\n")
 			}
 
+			var dynamicAttrBlocks []*AttrStartBlock
+
 			for _, attrBlock := range blk.AttrBlocks {
+				if r, _ := utf8.DecodeRuneInString(attrBlock.Name); unicode.IsLower(r) {
+					dynamicAttrBlocks = append(dynamicAttrBlocks, attrBlock)
+					continue
+				}
+
 				fmt.Fprintf(buf, "EGO.%s = func() {\n", attrBlock.Name)
 				writeBlocksTo(buf, attrBlock.Yield)
+				fmt.Fprint(buf, "}\n")
+			}
+
+			if len(dynamicAttrBlocks) > 0 {
+				fmt.Fprintf(buf, "EGO.AttrBlocks = map[string]func(){\n")
+				for _, attrBlock := range dynamicAttrBlocks {
+					fmt.Fprintf(buf, "	%q: func() {\n", attrBlock.Name)
+					writeBlocksTo(buf, attrBlock.Yield)
+					fmt.Fprint(buf, "},\n")
+				}
 				fmt.Fprint(buf, "}\n")
 			}
 
